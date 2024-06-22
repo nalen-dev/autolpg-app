@@ -76,3 +76,10 @@ type TransactionSucces struct {
 	TransactionId string `json:"transactionId"`
 	TransactionUniqKey	string `json:"transactionUniqKey"`
 }
+
+type WriteFilteredDataParam struct {
+	NIK 		string
+	Sheet 		string
+	Keterangan	string
+	Customer	Customer
+}
