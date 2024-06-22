@@ -17,7 +17,7 @@ import (
 
 
 type CustomerRepository interface {
-	GetCustData(nationalId string) (models.GetCustomerResponse,string)
+	GetCustData(nationalId string) (models.GetCustomerResponse, error)
 	CreateTransaction(param models.TransactionParam) (models.TransactionSuccesResponse, error)
 	ReadCustsFromExcel(sheetChoose string, columnNumb int, index int) models.CustFromExcel
 	WriteTransactionToExcel(userTrans models.CustToExcel, sheetChoose string) error
@@ -25,6 +25,9 @@ type CustomerRepository interface {
 	ReadRowExcel(file string, sheet string, row int, col int) string
 	WriteFilteredData(param models.WriteFilteredDataParam) error
 	UpdateRowsFiltered(kelurahan string, numb int) error 
+	GetNIKFiltered(row int, sheet string) (models.NIKFiltered, error)
+	GetHistoryTransactionExcel(NIK string, sheet string, transMaks int) (bool, error) 
+	UpdateCustHistoryTrans(sheet string, NIK string, keterangan string, tag string, isTransFail bool) (int, error)
 }
 
 type customerRepository struct {
@@ -39,14 +42,56 @@ func NewCustRepo(httpClient *http.Client, token string) CustomerRepository{
 		}
 }
 
-func (u customerRepository) GetCustData(nationalId string) (models.GetCustomerResponse, string) {
+func (u customerRepository) GetHistoryTransactionExcel(NIK string, sheet string, transMaks int) (bool, error) {
+	f, err := excelize.OpenFile("libs/MAP_TRANSACTIONS.xlsx")
+	
+	if err != nil {
+		log.Println(err)
+		return false, err
+	}
+	defer f.Close()
+
+	sheetName := helper.FindOrCreateSheet(f, sheet)
+
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		log.Println(err)
+		return false, err
+	}
+
+	for index, row := range rows {
+
+		if len(rows) > 1 {
+
+		if index > len(rows) {
+			return true, err
+			}
+		
+		if row[0] == NIK {
+			if row[3] == "NO" {
+				return false, err
+				}
+			num, err := strconv.Atoi(row[2])
+			if err != nil {
+				log.Println(err)
+				return false, err
+				}	
+			if transMaks <= num {
+				return false, err
+				}
+			}
+		}
+	}
+	return true, nil
+}
+
+func (u customerRepository) GetCustData(nationalId string) (models.GetCustomerResponse, error) {
 	var response models.GetCustomerResponse
-	var errResponse models.Response
 
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://api-map.my-pertamina.id/customers/v1/verify-nik?nationalityId=%s", nationalId), nil)
 	if err != nil {
-		log.Fatal(err)
-		return response, ""
+		log.Println(err)
+		return response, err
 	}
 
 	req.Header.Set("Authorization", u.token)
@@ -56,76 +101,133 @@ func (u customerRepository) GetCustData(nationalId string) (models.GetCustomerRe
 
 	if err != nil {
 		log.Println("Errored when sending request to the server")
-		return response, ""
+		return response, err
 	}
 
 	defer resp.Body.Close()
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return response, err
 	}
-
-    err = json.Unmarshal(responseBody, &errResponse)
-    if err != nil {
-        log.Fatal("Error decoding JSON:", err)
-        return response,""
-    }
-
-	if errResponse.Code == 429 {
-		log.Println("To many request! Wait couple minutes")	
-		response.Code = 429
-		return response, ""
-	}
-
-	if errResponse.Code >= 400 && errResponse.Code < 500 {
-		if errResponse.Code == 403 || errResponse.Code == 401 {
-			log.Println("Token Bermasalah!")
-			response.Code = 429
-			return response, ""
-		}
-		return response, "X"
-	}
-
 
 	err = json.Unmarshal(responseBody, &response)
 	if err != nil {
-        log.Fatal("Error decoding JSON:", err)
-        return response, ""
+        log.Println("Error decoding JSON:", err)
+        return response, err
     }
-	return response, ""
+
+	if response.Code == 429 {
+		log.Println("To many request! Wait couple minutes")	
+		return response, fmt.Errorf("ERROR")
+	}
+
+	if response.Code >= 400 && response.Code < 500 {
+		if response.Code == 403 || response.Code == 401 {
+			log.Println("Token Bermasalah!")
+			return response, fmt.Errorf("ERROR")
+		}
+		return response, fmt.Errorf("ERROR")
+	}
+	return response, nil
+}
+
+
+func (u customerRepository) GetNIKFiltered(row int, sheet string) (models.NIKFiltered, error) {
+	var nik models.NIKFiltered
+	
+	f, err := excelize.OpenFile("libs/DATA_FILTERED.xlsx")
+
+	if err != nil {
+		log.Println(err)
+		return nik, err
+	}
+	defer f.Close()
+
+
+	rows, err := f.GetRows(sheet)
+	if err != nil {
+		log.Fatalf("Sheet `%s` pada `%s` tidak ditemukan.", sheet, "libs/DATA_FILTERED.xlsx")
+		return nik, err
+	}
+
+	nik.NIK = rows[row + 1][0]
+	nik.Code = rows[row +1][1]
+	return nik, nil	
+}
+
+func (u customerRepository) UpdateCustHistoryTrans(sheet string, NIK string, keterangan string, tag string, isTransFail bool) (int, error){
+	var rowNumb int
+	f, err := excelize.OpenFile("libs/MAP_TRANSACTIONS.xlsx")
+
+	if err != nil{
+		log.Println(err)
+		return 0, err
+	}	
+	defer f.Close()
+
+	sheetName := helper.FindOrCreateSheet(f, sheet)
+	rows, err := f.GetRows(sheetName)
+	if err != nil{
+		log.Println(err)
+		return 0, err
+	}
+
+	for index, row := range rows {
+		if row[0] == NIK {
+			if !isTransFail {
+				f.SetCellValue(sheetName, "D"+strconv.Itoa(index+1), "NO")			
+				f.SetCellValue(sheetName, "E"+strconv.Itoa(index+1), keterangan)
+				f.Save()
+				return -1, nil
+			}
+		    totalTrans, _ := strconv.Atoi(row[2])
+			f.SetCellValue(sheetName, "C"+strconv.Itoa(index+1), strconv.Itoa(totalTrans + 1))
+			f.SetCellValue(sheetName, "E"+strconv.Itoa(index+1), keterangan)
+			f.Save()
+			return 1, nil
+		}
+
+		if index + 1 == len(rows) {
+			rowNumb = index + 1
+			break
+		} 
+	}
+
+	f.SetCellValue(sheetName, "A"+strconv.Itoa(rowNumb+1), NIK)
+	f.SetCellValue(sheetName, "B"+strconv.Itoa(rowNumb+1), tag)
+	f.SetCellValue(sheetName, "C"+strconv.Itoa(rowNumb+1), 1)
+	f.SetCellValue(sheetName, "E"+strconv.Itoa(rowNumb+1), keterangan)
+	if !isTransFail {
+		f.SetCellValue(sheetName, "D"+strconv.Itoa(rowNumb+1), "NO")
+	} else {
+		f.SetCellValue(sheetName, "D"+strconv.Itoa(rowNumb+1), "YES")
+	}
+	f.Save()
+	return 1, nil
 }
 
 func (u customerRepository) ReadCustsFromExcel(sheetChoose string, columnNumb int, index int) models.CustFromExcel{
 	var custs models.CustFromExcel
-	var currentRow int
+	// var currentRow int
 
-	f, err := excelize.OpenFile("libs/MAP_TRANSACTIONS.xlsx")
-	if err != nil {
-		log.Println(err)
-		return custs
-	}
-
-	currentRow, _ = helper.FindSheetLength(f, sheetChoose)
-	f.Close()
-
-	f, err = excelize.OpenFile("libs/DATA_MAP_PANGKALAN_2024.xlsx")
-	if err != nil {
-		log.Println(err)
-		return custs
-	}
-
-	rows, err := f.GetRows(sheetChoose)
-	if err != nil {
-		log.Fatalf("Sheet `%s` pada DATA_MAP_PANGKALAN_2024.xlsx tidak ditemukan.", sheetChoose)
-		return custs	
-	}
-
-	custs.NumbRow = currentRow - 1
-	custs.NIK = rows[currentRow - 1][columnNumb]
+	// f, err := excelize.OpenFile("libs/MAP_TRANSACTIONS.xlsx")
+	// defer f.Close()
 	
-	if index == 0 {
-		helper.CheckNIK(custs.NIK)
-	}
+	// if err != nil {
+	// 	log.Println(err)
+	// 	return custs
+	// }
+
+	// currentRow, _ = helper.FindSheetLength(f, sheetChoose)
+	// if err := f.Save(); err != nil {
+	// 	log.Println("Error saving MAP_TRANSACTIONS.xlsx:", err)
+	// 	return custs
+	// }	
+
+	// if index == 0 {
+	// 	helper.CheckNIK(custs.NIK)
+	// }
 	
 	return custs
 }
@@ -337,10 +439,10 @@ func (u customerRepository) CreateTransaction(param models.TransactionParam) (mo
         return response, err
     }
 
-	if errResponse.Code >=400 && errResponse.Code < 500 {
+	if errResponse.Code >= 400 && errResponse.Code < 500 {
 		response.Code = errResponse.Code
 		response.Message = errResponse.Message
-		return response, nil 
+		return response, helper.ErrTansFail
 	}
 
 	err = json.Unmarshal(responseBody, &response)
@@ -349,5 +451,5 @@ func (u customerRepository) CreateTransaction(param models.TransactionParam) (mo
         return response, err
     }
 
-	return response, err
+	return response, nil
 }

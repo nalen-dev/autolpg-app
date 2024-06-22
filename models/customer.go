@@ -83,3 +83,8 @@ type WriteFilteredDataParam struct {
 	Keterangan	string
 	Customer	Customer
 }
+
+type NIKFiltered struct {
+	NIK 	string
+	Code	string
+}

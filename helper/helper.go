@@ -25,6 +25,11 @@ func FindSheetLength(f *excelize.File, sheetChoose string) (int, string){
 	numb, _ := f.GetSheetIndex(sheetName)
 	if numb == -1 {
 		f.NewSheet(sheetName)
+		f.SetCellValue(sheetName, "A1", "NIK")
+		f.SetCellValue(sheetName, "B1", "TAG")
+		f.SetCellValue(sheetName, "C1", "TRANSACTION ID")
+		f.SetCellValue(sheetName, "D1", "Jumlah Transaksi Bulanan")
+		f.SetCellValue(sheetName, "E1", "KETERANGAN")
 	}
 
 	rows, err := f.GetRows(sheetName)
@@ -36,29 +41,41 @@ func FindSheetLength(f *excelize.File, sheetChoose string) (int, string){
 	return startRow, sheetName
 }
 
-func FindOrCreateSheet(f *excelize.File, sheetChoose string)(int, string){
+func FindOrCreateSheet(f *excelize.File, sheetChoose string)(string){
+	var t time.Time
+	
+	firstOfMonth := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
+	// Hitung jumlah hari dari awal minggu ke hari pertama bulan tersebut
+	weekday := int(firstOfMonth.Weekday())
+	if weekday == 0 {
+		// Jika hari pertama adalah Minggu (0), ubah menjadi 7 agar Minggu dianggap sebagai akhir minggu
+		weekday = 7
+	}
+	// Hitung hari dalam bulan tersebut
+	dayOfMonth := t.Day()
+	// Hitung minggu dalam bulan tersebut
+	weekOfMonth := (dayOfMonth + weekday - 1) / 7
+	if (dayOfMonth+weekday-1)%7 > 0 {
+		weekOfMonth++
+	}
+	
 	now := time.Now()
-	_, week := now.ISOWeek()
 	monthUpper := now.Format("Jan") 
 
-	sheetName := fmt.Sprintf("%s-%s-WEEK%d", sheetChoose, monthUpper, week)
+	sheetName := fmt.Sprintf("%s-%s-WEEK%d", sheetChoose, monthUpper, weekOfMonth)
 
 	numb, _ := f.GetSheetIndex(sheetName)
 	if numb == -1 {
 		f.NewSheet(sheetName)
-
-		f.SetCellValue(sheetName, "A1", "Header 1")
-		f.SetCellValue(sheetName, "B1", "Header 2")
-		f.SetCellValue(sheetName, "C1", "Header 3")
+		f.SetCellValue(sheetName, "A1", "NIK")
+		f.SetCellValue(sheetName, "B1", "TAG")
+		f.SetCellValue(sheetName, "C1", "Jumlah Transaksi Bulanan")
+		f.SetCellValue(sheetName, "D1", "isAvailable")
+		f.SetCellValue(sheetName, "E1", "KETERANGAN")
 	}
 
-	rows, err := f.GetRows(sheetName)
-	if err != nil {
-		return 0, ""
-	}
-
-	startRow := len(rows) + 1
-	return startRow, sheetName
+	f.Save()
+	return sheetName
 }
 
 func GetCustomerCode(cust models.Customer) string {
@@ -117,6 +134,7 @@ func StartAppTerminalInput() models.StartAppInput {
             fmt.Println("Input tidak valid. Silakan masukkan nomor 1 atau 2.")
         }
     }
+	clearTerminal()
 
 	startInput.Token = userToken
 	return startInput
@@ -178,10 +196,14 @@ func FilterDataTerminalInpit() models.FilterDataInput {
 		}
 	}
 
+	clearTerminal()
 
 	userInput.SheetChoose = sheetChoose
 	userInput.DataUpdate = totalUpdateData
 	userInput.ColumnChoose = columnChoose
+	fmt.Println("Nilai sheet: ", sheetChoose)
+	fmt.Println("Nilai index column: ", columnChoose)	
+	fmt.Println("Nilai data diproses: ", totalUpdateData)
 
 	return userInput
 }
@@ -194,7 +216,7 @@ func BulkDataTerminalInput() models.BulkInput {
 
 	var sheetChoose string
 	for {
-		fmt.Print("Masukkan sheet name yang diinginkan pada file DATA_MAP_PANGKALAN_2024.xlsx: ")
+		fmt.Print("Masukkan sheet name yang diinginkan pada file DATA_FILTERED.xlsx: ")
 		if scanner.Scan() {
 			sheetChoose = scanner.Text()
 		}
@@ -206,20 +228,48 @@ func BulkDataTerminalInput() models.BulkInput {
 		}
 	}
 
-	var columnChoose int
+	var tagSelected string
 	for {
-		fmt.Printf("Masukkan index column NIK pada sheet %s: ", sheetChoose)
+        fmt.Println("Pilih kategori customer yang anda inginkan:")
+        fmt.Println("1. RT (Rumah Tangga)")
+        fmt.Println("2. UM (Usaha Mikro)")
+        fmt.Print("Masukkan nomor category (1 atau 2): ")
+
+        if scanner.Scan() {
+            tagSelected = scanner.Text()
+        }
+
+        if tagSelected == "1" || tagSelected == "2" {
+			
+			if tagSelected == "1" {
+				userInput.TagSelected = "RT"
+			}
+
+			if tagSelected == "2" {
+				userInput.TagSelected = "UM"
+			}
+
+            break
+        } else {
+            fmt.Println("Input tidak valid. Silakan masukkan nomor 1 atau 2.")
+        }
+    }
+
+	var maxPurchase int
+	for {
+		fmt.Print("Berapa banyak customer bisa beli dalam 1 bulan?: ")
 		if scanner.Scan() {
 			input := scanner.Text()
-		
 			num, err := strconv.Atoi(input)
 			if err != nil {
-				log.Printf("Input tidak valid untuk totalInsertData: %v\n", err)
+				log.Printf("Input tidak valid untuk max purchase: %v\n", err)
 				continue
 			}
-			if num >= 0 {
-				columnChoose = num
+			if num > 0 {
+				maxPurchase = num
 				break
+			} else {
+				fmt.Println("maxPurchase harus lebih dari 0. Silakan masukkan kembali.")
 			}
 		}
 	}
@@ -243,28 +293,17 @@ func BulkDataTerminalInput() models.BulkInput {
 		}
 	}
 
-	var userToken string
-	for {
-		fmt.Print("Masukkan token: ")
-		if scanner.Scan() {
-			userToken = scanner.Text()
-		}
-		if userToken != "" {
-			break
-		} else {
-			fmt.Println("Nilai tidak boleh kosong. Silakan masukkan kembali.")
-		}
-	}
-
 	clearTerminal()
 
 	fmt.Println("Nilai sheet: ", sheetChoose)
-	fmt.Println("Nilai index column: ", columnChoose)	
+	fmt.Println("Nilai customer category dipilih: ", userInput.TagSelected)	
+	fmt.Println("Max Purchase: ", maxPurchase)
 	fmt.Println("Nilai data diproses: ", totalInsertData)
 
-	userInput.ColumnChoose = columnChoose
+	userInput.ColumnChoose = 0
 	userInput.SheetChoose = sheetChoose
 	userInput.TotalInsertData =totalInsertData
+	userInput.UserMaxMonthPurchase = maxPurchase
 	return userInput
 }
 
@@ -296,4 +335,27 @@ func ExitHandler() {
         fmt.Println("Exiting...")
         break
     }
+}
+
+func TransParamPrep(prData models.GetProdResponse, userDetail models.GetCustomerResponse, NIK string) models.TransactionParam {
+		var transactionParam models.TransactionParam
+
+		transactionParam.Products = make([]models.Products, 1)
+		transactionParam.Products[0].ProductID = prData.Data.ProductID
+		transactionParam.Products[0].Quantity = 1
+		transactionParam.InputNominal = prData.Data.Price
+		transactionParam.Change = 0
+		transactionParam.PaymentType = "cash"
+		transactionParam.Subsidi.NIK = NIK
+		transactionParam.Subsidi.FamilyID = userDetail.Data.FamilyId
+		transactionParam.Subsidi.Category = userDetail.Data.CustomerTypes[len(userDetail.Data.CustomerTypes)-1].Name
+		transactionParam.Subsidi.SourceTypeID = userDetail.Data.CustomerTypes[len(userDetail.Data.CustomerTypes)-1].SourceTypeId
+		transactionParam.Subsidi.Nama = userDetail.Data.Name
+		transactionParam.Subsidi.ChannelInject = userDetail.Data.ChannelInject
+		transactionParam.Subsidi.PengambilanItemSubsidi = make([]models.PengambilanItemSubsidi, 1)
+		transactionParam.Subsidi.PengambilanItemSubsidi[0].Item = "ELPIJI"
+		transactionParam.Subsidi.PengambilanItemSubsidi[0].PotonganHarga = 0
+		transactionParam.Subsidi.PengambilanItemSubsidi[0].Quantitas = 1
+		
+		return transactionParam
 }

@@ -9,9 +9,11 @@ var (
 
 
 type BulkInput struct {
-	SheetChoose		string 	`json:"sheetChoose"`
-	ColumnChoose	int		`json:"columnChoose"`
-	TotalInsertData	int		`json:"totalInsertData"`
+	SheetChoose				string 	`json:"sheetChoose"`
+	ColumnChoose			int		`json:"columnChoose"`
+	TotalInsertData			int		`json:"totalInsertData"`
+	TagSelected				string	`json:"tagSelected"`
+	UserMaxMonthPurchase	int		`json:"userMaxMonthPurchase"`
 }
 
 
