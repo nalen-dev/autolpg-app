@@ -19,10 +19,9 @@ import (
 type CustomerRepository interface {
 	GetCustData(nationalId string) (models.GetCustomerResponse, error)
 	CreateTransaction(param models.TransactionParam) (models.TransactionSuccesResponse, error)
-	ReadCustsFromExcel(sheetChoose string, columnNumb int, index int) models.CustFromExcel
 	WriteTransactionToExcel(userTrans models.CustToExcel, sheetChoose string) error
 	GetRowsFiltered(kelurahan string) (int, error)
-	ReadRowExcel(file string, sheet string, row int, col int) string
+	ReadRowExcel(file string, sheet string, row int, col int) (string,error)
 	WriteFilteredData(param models.WriteFilteredDataParam) error
 	UpdateRowsFiltered(kelurahan string, numb int) error 
 	GetNIKFiltered(row int, sheet string) (models.NIKFiltered, error)
@@ -147,7 +146,7 @@ func (u customerRepository) GetNIKFiltered(row int, sheet string) (models.NIKFil
 
 	rows, err := f.GetRows(sheet)
 	if err != nil {
-		log.Fatalf("Sheet `%s` pada `%s` tidak ditemukan.", sheet, "libs/DATA_FILTERED.xlsx")
+		log.Printf("Sheet `%s` pada `%s` tidak ditemukan.", sheet, "libs/DATA_FILTERED.xlsx")
 		return nik, err
 	}
 
@@ -196,61 +195,36 @@ func (u customerRepository) UpdateCustHistoryTrans(sheet string, NIK string, ket
 
 	f.SetCellValue(sheetName, "A"+strconv.Itoa(rowNumb+1), NIK)
 	f.SetCellValue(sheetName, "B"+strconv.Itoa(rowNumb+1), tag)
-	f.SetCellValue(sheetName, "C"+strconv.Itoa(rowNumb+1), 1)
 	f.SetCellValue(sheetName, "E"+strconv.Itoa(rowNumb+1), keterangan)
 	if !isTransFail {
 		f.SetCellValue(sheetName, "D"+strconv.Itoa(rowNumb+1), "NO")
+		f.SetCellValue(sheetName, "C"+strconv.Itoa(rowNumb+1), 0)
 	} else {
 		f.SetCellValue(sheetName, "D"+strconv.Itoa(rowNumb+1), "YES")
+		f.SetCellValue(sheetName, "C"+strconv.Itoa(rowNumb+1), 1)
 	}
 	f.Save()
 	return 1, nil
 }
 
-func (u customerRepository) ReadCustsFromExcel(sheetChoose string, columnNumb int, index int) models.CustFromExcel{
-	var custs models.CustFromExcel
-	// var currentRow int
-
-	// f, err := excelize.OpenFile("libs/MAP_TRANSACTIONS.xlsx")
-	// defer f.Close()
-	
-	// if err != nil {
-	// 	log.Println(err)
-	// 	return custs
-	// }
-
-	// currentRow, _ = helper.FindSheetLength(f, sheetChoose)
-	// if err := f.Save(); err != nil {
-	// 	log.Println("Error saving MAP_TRANSACTIONS.xlsx:", err)
-	// 	return custs
-	// }	
-
-	// if index == 0 {
-	// 	helper.CheckNIK(custs.NIK)
-	// }
-	
-	return custs
-}
-
-
-func (c customerRepository) ReadRowExcel(file string, sheet string, row int, col int) string{
+func (c customerRepository) ReadRowExcel(file string, sheet string, row int, col int) (string, error){
 	var data string
 	
 	f, err := excelize.OpenFile(file)
 	if err != nil {
 		log.Println(err)
-		return data
+		return data, err
 	}
 
 	rows, err := f.GetRows(sheet)
 	if err != nil {
-		log.Fatalf("Sheet `%s` pada `%s` tidak ditemukan.", sheet, file)
-		return data	
+		log.Printf("Sheet `%s` pada `%s` tidak ditemukan.", sheet, file)
+		return data, err
 	}
 
 	data = rows[row][col]
 
-	return data
+	return data, err
 }
 
 func (c customerRepository) UpdateRowsFiltered(kelurahan string, numb int) error {
@@ -422,20 +396,20 @@ func (u customerRepository) CreateTransaction(param models.TransactionParam) (mo
 	resp, err := u.httpClient.Do(req)
 	
 	if err != nil {
-		log.Fatalf("Errored when sending request to the server: %s", err)
+		log.Printf("Errored when sending request to the server: %s", err)
 		return response, err
 	}
 
 	defer resp.Body.Close()
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 		return response, err
 	}
 
 	err = json.Unmarshal(responseBody, &errResponse)
     if err != nil {
-        log.Fatal("Error decoding JSON:", err)
+        log.Println("Error decoding JSON:", err)
         return response, err
     }
 

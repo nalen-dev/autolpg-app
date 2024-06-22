@@ -182,8 +182,12 @@ func(u usecase) FilteringData(){
 	for i := lastRow + 1; i < userInput.DataUpdate + lastRow + 1; i++ {
 		var insertFilteredData models.WriteFilteredDataParam
 	
-		NIK := u.custRepo.ReadRowExcel("libs/DATA_MAP_PANGKALAN_2024.xlsx", userInput.SheetChoose, i, userInput.ColumnChoose)
+		NIK, err := u.custRepo.ReadRowExcel("libs/DATA_MAP_PANGKALAN_2024.xlsx", userInput.SheetChoose, i, userInput.ColumnChoose)
 		
+		if err != nil{
+			return
+		}
+
 		log.Printf("NIK %s diproses", NIK)
 		s1, err := u.custRepo.GetCustData(NIK)
 		

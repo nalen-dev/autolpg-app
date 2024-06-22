@@ -31,7 +31,7 @@ func (u productRepository) GetProductData() models.GetProdResponse {
 
 	req, err := http.NewRequest(http.MethodGet, "https://api-map.my-pertamina.id/general/v2/products", nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 		return response
 	}
 
@@ -48,7 +48,7 @@ func (u productRepository) GetProductData() models.GetProdResponse {
 	defer resp.Body.Close()
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
     err = json.Unmarshal(responseBody, &response)

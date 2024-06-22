@@ -365,7 +365,7 @@ func CheckNIK(nik string) {
 	regex := regexp.MustCompile(`^\d{16}$`)
 	if regex.MatchString(nik) {
 	} else {
-		log.Fatal("Coba cek apakah index column sudah tepat")
+		log.Println("Coba cek apakah index column sudah tepat")
 	}
 }
 

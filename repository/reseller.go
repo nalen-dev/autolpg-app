@@ -31,7 +31,7 @@ func (u resellerRepository) GetResellerData() models.GetResellerResponse {
 
 	req, err := http.NewRequest(http.MethodGet, "https://api-map.my-pertamina.id/general/v1/users/profile", nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 		return response
 	}
 
@@ -48,7 +48,8 @@ func (u resellerRepository) GetResellerData() models.GetResellerResponse {
 	defer resp.Body.Close()
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return response
 	}
 
     err = json.Unmarshal(responseBody, &response)
