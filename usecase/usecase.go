@@ -133,7 +133,7 @@ func (u usecase) BulkData(token string){
 			return 
 		}
 
-		log.Printf("========== PERCOBAAN TRANSAKSI ke-%d ==========\nNIK: %s\n", totalPercobaan, user.NIK)
+		log.Printf("\n========== PERCOBAAN TRANSAKSI ke-%d ==========\nNIK: %s\n", totalPercobaan, user.NIK)
 		prData := u.prodRepo.GetProductData()
 		trParam := helper.TransParamPrep(prData, userDetail, user.NIK)
 
@@ -145,8 +145,11 @@ func (u usecase) BulkData(token string){
 					return
 				}
 				failTrans++
+				totalPercobaan++
+				
 				fmt.Printf("Pesan: %s\n", transResp.Message)
-				log.Printf("========== TRANSAKSI SELESAI ==========\n")
+				fmt.Println("Status: GAGAL")
+				fmt.Println("========== TRANSAKSI SELESAI ==========")
 				time.Sleep(25 * time.Second)
 				continue
 			}
@@ -161,7 +164,8 @@ func (u usecase) BulkData(token string){
 		row++
 		totalPercobaan++
 		fmt.Printf("Pesan: %s\n", transResp.Message)
-		log.Printf("========== PROSES SELESAI ==========\n")
+		fmt.Println("Status: BERHASIL")
+		fmt.Println("========== TRANSAKSI SELESAI ==========")
 		time.Sleep(25 * time.Second)
 	}
 

@@ -41,41 +41,82 @@ func FindSheetLength(f *excelize.File, sheetChoose string) (int, string){
 	return startRow, sheetName
 }
 
-func FindOrCreateSheet(f *excelize.File, sheetChoose string)(string){
-	var t time.Time
-	
+func FindOrCreateSheet(f *excelize.File, sheetChoose string)(string, error){
+	t := time.Now()
 	firstOfMonth := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
-	// Hitung jumlah hari dari awal minggu ke hari pertama bulan tersebut
+
 	weekday := int(firstOfMonth.Weekday())
 	if weekday == 0 {
-		// Jika hari pertama adalah Minggu (0), ubah menjadi 7 agar Minggu dianggap sebagai akhir minggu
 		weekday = 7
 	}
-	// Hitung hari dalam bulan tersebut
-	dayOfMonth := t.Day()
-	// Hitung minggu dalam bulan tersebut
-	weekOfMonth := (dayOfMonth + weekday - 1) / 7
-	if (dayOfMonth+weekday-1)%7 > 0 {
-		weekOfMonth++
-	}
-	
-	now := time.Now()
-	monthUpper := now.Format("Jan") 
 
+	dayOfMonth := t.Day()
+	weekOfMonth := (dayOfMonth-1+weekday-1)/7 + 1
+	monthUpper := firstOfMonth.Format("Jan")
 	sheetName := fmt.Sprintf("%s-%s-WEEK%d", sheetChoose, monthUpper, weekOfMonth)
 
 	numb, _ := f.GetSheetIndex(sheetName)
 	if numb == -1 {
 		f.NewSheet(sheetName)
 		f.SetCellValue(sheetName, "A1", "NIK")
-		f.SetCellValue(sheetName, "B1", "TAG")
-		f.SetCellValue(sheetName, "C1", "Jumlah Transaksi Bulanan")
-		f.SetCellValue(sheetName, "D1", "isAvailable")
-		f.SetCellValue(sheetName, "E1", "KETERANGAN")
-	}
+		if err := f.MergeCell(sheetName, "A1", "A2"); err != nil {
+			log.Printf("Error merging cells: %v\n", err)
+			return "", err
+		}
 
-	f.Save()
-	return sheetName
+		f.SetCellValue(sheetName, "B1", "TAG")
+		if err := f.MergeCell(sheetName, "B1", "B2"); err != nil {
+			log.Printf("Error merging cells: %v\n", err)
+			return "", err
+		}
+		
+		f.SetCellValue(sheetName, "C1", "Jumlah Transaksi Bulanan")
+		if err := f.MergeCell(sheetName, "C1", "C2"); err != nil {
+			log.Printf("Error merging cells: %v\n", err)
+			return "", err
+		}
+
+		f.SetCellValue(sheetName, "D1", "isAvailable")
+		if err := f.MergeCell(sheetName, "D1", "D2"); err != nil {
+			log.Printf("Error merging cells: %v\n", err)
+			return "", err
+		}
+
+		f.SetCellValue(sheetName, "E1", "KETERANGAN")
+		if err := f.MergeCell(sheetName, "E1", "E2"); err != nil {
+			log.Printf("Error merging cells: %v\n", err)
+			return "", err
+		}
+
+		f.SetCellValue(sheetName, "G1", "TOTAL")
+		if err := f.MergeCell(sheetName, "G1", "G2"); err != nil {
+			log.Printf("Error merging cells: %v\n", err)
+			return "", err
+		}
+		
+		f.SetCellValue(sheetName, "H1", "RT")
+		f.SetCellFormula(sheetName, "H2", `SUMIF(B3:B9999, "RT", C3:C9999)`)
+
+		f.SetCellValue(sheetName, "I1", "UM")
+		f.SetCellFormula(sheetName, "I2", `SUMIF(B3:B9999, "UM", C3:C9999)`)
+
+
+		style, err := f.NewStyle(&excelize.Style{Alignment: &excelize.Alignment{Horizontal:"center", Vertical: "center"}})
+		if err != nil {
+			log.Fatalf("Error creating style: %v", err)
+		}
+
+		f.SetCellStyle(sheetName, "A1", "A2", style)
+		f.SetCellStyle(sheetName, "B1", "B2", style)
+		f.SetCellStyle(sheetName, "C1", "C2", style)
+		f.SetCellStyle(sheetName, "D1", "D2", style)
+		f.SetCellStyle(sheetName, "E1", "E2", style)
+		f.SetCellStyle(sheetName, "F1", "F2", style)
+		f.SetCellStyle(sheetName, "G1", "G2", style)
+
+		f.Save()
+	}
+	return sheetName, nil
 }
 
 func GetCustomerCode(cust models.Customer) string {

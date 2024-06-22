@@ -51,7 +51,7 @@ func (u customerRepository) GetHistoryTransactionExcel(NIK string, sheet string,
 	}
 	defer f.Close()
 
-	sheetName := helper.FindOrCreateSheet(f, sheet)
+	sheetName, _ := helper.FindOrCreateSheet(f, sheet)
 
 	rows, err := f.GetRows(sheetName)
 	if err != nil {
@@ -166,7 +166,7 @@ func (u customerRepository) UpdateCustHistoryTrans(sheet string, NIK string, ket
 	}	
 	defer f.Close()
 
-	sheetName := helper.FindOrCreateSheet(f, sheet)
+	sheetName, _ := helper.FindOrCreateSheet(f, sheet)
 	rows, err := f.GetRows(sheetName)
 	if err != nil{
 		log.Println(err)
