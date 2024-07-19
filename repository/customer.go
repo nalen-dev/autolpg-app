@@ -181,7 +181,7 @@ func (u customerRepository) UpdateCustHistoryTrans(sheet string, NIK string, ket
 				return -1, nil
 			}
 		    totalTrans, _ := strconv.Atoi(row[2])
-			f.SetCellValue(sheetName, "C"+strconv.Itoa(index+1), strconv.Itoa(totalTrans + 1))
+			f.SetCellValue(sheetName, "C"+strconv.Itoa(index+1), totalTrans + 1)
 			f.SetCellValue(sheetName, "E"+strconv.Itoa(index+1), keterangan)
 			f.Save()
 			return 1, nil
