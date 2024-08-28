@@ -28,6 +28,9 @@ type CustomerRepository interface {
 	GetNIKFiltered(row int, sheet string) (models.NIKFiltered, error)
 	GetHistoryTransactionExcel(NIK string, sheet string, transMaks int) (bool, error) 
 	UpdateCustHistoryTrans(sheet string, NIK string, keterangan string, tag string, isTransFail bool) (int, error)
+	GetHistoryTransactionDB(NIK string, sheet string, transMaks int, itemPerPurchase int)(bool, bool, int, error)
+	CreateHistoryCustTransaction(NIK string, totalTrans int, kecamatan string, userCat string, isAvailable int, sheet string)error
+	UpdateHistoryCustTranscation(NIK string, sheet string, updateTotalTrans int, isAvailable int) error
 }
 
 type customerRepository struct {
@@ -42,6 +45,123 @@ func NewCustRepo(httpClient *http.Client, token string, Db *sql.DB) CustomerRepo
 			token: token,
 			Db: Db,
 		}
+}
+
+
+func (u customerRepository) UpdateHistoryCustTranscation(NIK string, sheet string, updateTotalTrans int, isAvailable int) error {
+	sheetName := helper.GenerateSheetName(sheet);
+	NIKnumb, err := strconv.Atoi(NIK)	
+	if err != nil {
+        fmt.Println("Error converting string to int:", err)
+        return err
+    }
+
+	query := `
+		UPDATE trans_hist
+		SET
+			is_available = ?,
+			total_trans = ?
+		WHERE
+			trans_tab = ?
+		AND
+			ktp_id = ?
+	`
+	stmt, err := u.Db.Prepare(query)
+	if err != nil {
+        fmt.Printf("Error preparing statement: %v\n", err)
+        return err
+    }
+    defer stmt.Close()
+	
+	_, err = stmt.Exec(isAvailable, updateTotalTrans, sheetName, NIKnumb)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (u customerRepository) CreateHistoryCustTransaction(NIK string, totalTrans int, kecamatan string, userCat string, isAvailable int, sheet string)error{
+	
+	sheetName := helper.GenerateSheetName(sheet);
+	now := time.Now()
+    unixTimestamp := now.Unix()
+
+	NIKnumb, err := strconv.Atoi(NIK)	
+	if err != nil {
+        fmt.Println("Error converting string to int:", err)
+        return err
+    }
+	
+	query := `
+		INSERT INTO 
+		trans_hist 
+			(ktp_id, total_trans, trans_tab, kecamatan, user_cat, is_available, week_inserted)
+		VALUES
+			(?,?,?,?,?,?,?)
+	`
+	stmt, err := u.Db.Prepare(query)
+	if err != nil {
+        fmt.Printf("Error preparing statement: %v\n", err)
+        return err
+    }
+    defer stmt.Close()
+
+	_, err = stmt.Exec(NIKnumb, totalTrans, sheetName, kecamatan, userCat, isAvailable, unixTimestamp)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (u customerRepository) GetHistoryTransactionDB(NIK string, sheet string, transMaks int, itemPerPurchase int)(bool, bool, int, error){
+
+	var isAvailable int
+	var totalTrans int
+	sheetName := helper.GenerateSheetName(sheet);
+	NIKnumb, err := strconv.Atoi(NIK)
+    if err != nil {
+        fmt.Println("Error converting string to int:", err)
+        return false, true, 0 ,err
+    }
+
+	query := `
+			SELECT is_available, total_trans from trans_hist
+			WHERE trans_tab = ? 
+			AND
+			ktp_id = ?
+			`
+	stmt, err := u.Db.Prepare(query)
+	if err != nil {
+        fmt.Printf("Error preparing statement: %v\n", err)
+        return false, true, 0, err
+    }
+    defer stmt.Close()
+
+	res := stmt.QueryRow(sheetName, NIKnumb)
+	if err = res.Scan(&isAvailable, &totalTrans); err != nil{
+		if err == sql.ErrNoRows {
+			return true, true, 0, nil
+		}
+		return false, false, 0, err
+	}
+
+	if isAvailable == 0 {
+		return false, true, 0, nil
+	}
+
+	if  transMaks <= totalTrans - 1 {
+		return false, false, 0, nil
+	}
+
+	if transMaks <= totalTrans + itemPerPurchase - 1 {
+		return false, false, 0, nil
+	}
+
+	return true, false, totalTrans, nil
 }
 
 func (u customerRepository) GetHistoryTransactionExcel(NIK string, sheet string, transMaks int) (bool, error) {

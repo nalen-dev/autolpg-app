@@ -45,6 +45,21 @@ func FindSheetLength(f *excelize.File, sheetChoose string) (int, string){
 	return startRow, sheetName
 }
 
+func GenerateSheetName(sheetChoose string) string {
+	t := time.Now()
+	firstOfMonth := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
+
+	weekday := int(firstOfMonth.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+
+	dayOfMonth := t.Day()
+	weekOfMonth := (dayOfMonth-1+weekday-1)/7 + 1
+	monthUpper := firstOfMonth.Format("Jan")
+	return fmt.Sprintf("%s-%s-WEEK%d", sheetChoose, monthUpper, weekOfMonth)
+}
+
 func FindOrCreateSheet(f *excelize.File, sheetChoose string)(string, error){
 	t := time.Now()
 	firstOfMonth := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
@@ -321,9 +336,28 @@ func BulkDataTerminalInput() models.BulkInput {
         }
     }
 
+	var itemPerPurchase int
+	for {
+		fmt.Print("Berapa banyak item yang dibeli dalam 1 transaksi?: ")
+		if scanner.Scan() {
+			input := scanner.Text()
+			num, err := strconv.Atoi(input)
+			if err != nil {
+				log.Printf("Input tidak valid untuk item per transaksi: %v\n", err)
+				continue
+			}
+			if num > 0 {
+				itemPerPurchase = num
+				break
+			} else {
+				fmt.Println("item per transaksi harus lebih dari 0. Silakan masukkan kembali.")
+			}
+		}
+	}
+
 	var maxPurchase int
 	for {
-		fmt.Print("Berapa banyak customer bisa beli dalam 1 bulan?: ")
+		fmt.Print("Berapa banyak customer bisa beli dalam 1 minggu?: ")
 		if scanner.Scan() {
 			input := scanner.Text()
 			num, err := strconv.Atoi(input)
@@ -363,6 +397,7 @@ func BulkDataTerminalInput() models.BulkInput {
 
 	fmt.Println("Nilai sheet: ", sheetChoose)
 	fmt.Println("Nilai customer category dipilih: ", userInput.TagSelected)	
+	fmt.Println("Jumlah item per transaksi : ", itemPerPurchase)
 	fmt.Println("Max Purchase: ", maxPurchase)
 	fmt.Println("Nilai data diproses: ", totalInsertData)
 
@@ -370,6 +405,7 @@ func BulkDataTerminalInput() models.BulkInput {
 	userInput.SheetChoose = sheetChoose
 	userInput.TotalInsertData =totalInsertData
 	userInput.UserMaxMonthPurchase = maxPurchase
+	userInput.ItemPerPuchase = itemPerPurchase
 	return userInput
 }
 
@@ -403,12 +439,12 @@ func ExitHandler() {
     }
 }
 
-func TransParamPrep(prData models.GetProdResponse, userDetail models.GetCustomerResponse, NIK string) models.TransactionParam {
+func TransParamPrep(prData models.GetProdResponse, userDetail models.GetCustomerResponse, NIK string, itemPerPurchase int) models.TransactionParam {
 		var transactionParam models.TransactionParam
 
 		transactionParam.Products = make([]models.Products, 1)
 		transactionParam.Products[0].ProductID = prData.Data.ProductID
-		transactionParam.Products[0].Quantity = 1
+		transactionParam.Products[0].Quantity = itemPerPurchase
 		transactionParam.InputNominal = prData.Data.Price
 		transactionParam.Change = 0
 		transactionParam.PaymentType = "cash"
@@ -432,7 +468,6 @@ func GetToken(user string, password string)(string, error){
 
 	 // Konfigurasi untuk non-headless mode
 	 opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", false),
 		chromedp.Flag("enable-notifications", true),
 		chromedp.Flag("disable-notifications", true),
     )
@@ -473,7 +508,7 @@ func GetToken(user string, password string)(string, error){
         chromedp.SendKeys("#mantine-r0", user, chromedp.ByID),
         chromedp.SendKeys("#mantine-r1", password, chromedp.ByID),
         chromedp.Click(`.styles_root__6_rRr.styles_medium__7QTIz.styles_contained__1kIDF.styles_primary__pVpF_.styles_btnLogin__wsKTT`, chromedp.ByQuery),
-        chromedp.Sleep(3*time.Second), // Waktu tunggu tambahan setelah klik login
+        chromedp.Sleep(1*time.Second), // Waktu tunggu tambahan setelah klik login
     )
 
     if err != nil {
@@ -489,7 +524,9 @@ func GetToken(user string, password string)(string, error){
 	)
 
 	if err != nil {
-		return "", err
+		if err != context.DeadlineExceeded {
+			return "", err
+		}
 	}
 
 	if errorMessage != "" {
@@ -509,7 +546,7 @@ func GetToken(user string, password string)(string, error){
         chromedp.Navigate(protectedURL),
         chromedp.WaitVisible(`[data-testid="btnNav/app/transaction-report"]`, chromedp.ByQuery),
         chromedp.Click(`[data-testid="btnNav/app/transaction-report"]`, chromedp.ByQuery),
-        chromedp.Sleep(3*time.Second),
+        chromedp.Sleep(1*time.Second),
     )
     if err != nil {
         return "", err

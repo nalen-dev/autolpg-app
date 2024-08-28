@@ -14,6 +14,7 @@ type BulkInput struct {
 	TotalInsertData			int		`json:"totalInsertData"`
 	TagSelected				string	`json:"tagSelected"`
 	UserMaxMonthPurchase	int		`json:"userMaxMonthPurchase"`
+	ItemPerPuchase			int		`json:"itemPerPurchase"`
 }
 
 
@@ -26,4 +27,5 @@ type FilterDataInput struct {
 type StartAppInput struct {
 	Token 			string	`json:"token"`
 	Mode 			string	`json:"mode"`
+
 }

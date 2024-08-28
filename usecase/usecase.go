@@ -34,10 +34,9 @@ func (u usecase) BulkData(token string){
 	var totalPercobaan = 1
 	uInput := helper.BulkDataTerminalInput()
 
+	reseler := u.resellerRepo.GetResellerData()
+
 	for i := 0; i < uInput.TotalInsertData; {
-		if row == uInput.TotalInsertData - 1 {
-			row = 0
-		}
 
 		user, err := u.custRepo.GetNIKFiltered(row, uInput.SheetChoose)
 		if err != nil {
@@ -48,10 +47,11 @@ func (u usecase) BulkData(token string){
 			row++
 			continue
 		}
-	
-		isAvailForTrans, err := u.custRepo.GetHistoryTransactionExcel(user.NIK, uInput.SheetChoose, uInput.UserMaxMonthPurchase)
+		//change to db
+		isAvailForTrans, isNewTransaction, currentTotalTrans, err := u.custRepo.GetHistoryTransactionDB(user.NIK, uInput.SheetChoose, uInput.UserMaxMonthPurchase, uInput.ItemPerPuchase)
 
 		if err != nil {
+			fmt.Println(err)
 			return 
 		}
 
@@ -69,43 +69,74 @@ func (u usecase) BulkData(token string){
 
 		log.Printf("\n========== PERCOBAAN TRANSAKSI ke-%d ==========\nNIK: %s\n", totalPercobaan, user.NIK)
 		prData := u.prodRepo.GetProductData()
-		trParam := helper.TransParamPrep(prData, userDetail, user.NIK)
+		trParam := helper.TransParamPrep(prData, userDetail, user.NIK, uInput.ItemPerPuchase)
 
 		transResp, err := u.custRepo.CreateTransaction(trParam)
+
+		if isNewTransaction {
+			if err != nil {
+				if errors.Is(err, helper.ErrTansFail){
+					err = u.custRepo.CreateHistoryCustTransaction(user.NIK, 0, reseler.Data.DistrictName, user.Code, 0, uInput.SheetChoose)
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+
+					failTrans++
+					totalPercobaan++
+					
+					fmt.Printf("Pesan: %s\n", transResp.Message)
+					fmt.Println("Status: GAGAL")
+					fmt.Println("========== TRANSAKSI SELESAI ==========")
+					time.Sleep(25 * time.Second)
+					continue	
+				
+				}
+				fmt.Println(err)
+				return	
+			}
+			err = u.custRepo.CreateHistoryCustTransaction(user.NIK, uInput.ItemPerPuchase, reseler.Data.DistrictName, user.Code, 1, uInput.SheetChoose)
+			
+			if err != nil {
+				fmt.Println(err)	
+				return
+			}
+
+		}
+
 		if err != nil {
 			if errors.Is(err, helper.ErrTansFail){
-				 _, err := u.custRepo.UpdateCustHistoryTrans(uInput.SheetChoose, user.NIK, transResp.Message, user.Code, false)
-				if err != nil {
+				err = u.custRepo.UpdateHistoryCustTranscation(user.NIK, uInput.SheetChoose, currentTotalTrans, 0)
+				if err != nil{
+					fmt.Print(err)
 					return
 				}
+			}
+
 				failTrans++
 				totalPercobaan++
-				
 				fmt.Printf("Pesan: %s\n", transResp.Message)
 				fmt.Println("Status: GAGAL")
 				fmt.Println("========== TRANSAKSI SELESAI ==========")
 				time.Sleep(25 * time.Second)
-				continue
+				continue	
 			}
-			return 
+			
+			err = u.custRepo.UpdateHistoryCustTranscation(user.NIK, uInput.SheetChoose, currentTotalTrans + uInput.ItemPerPuchase, 1)
+			if err != nil {
+				return
+			}
+			succesTrans++
+			i++
+			row++
+			totalPercobaan++
+			fmt.Printf("Pesan: %s\n", transResp.Message)
+			fmt.Println("Status: BERHASIL")
+			fmt.Println("========== TRANSAKSI SELESAI ==========")
+			time.Sleep(25 * time.Second)
 		}
-		_, err = u.custRepo.UpdateCustHistoryTrans(uInput.SheetChoose, user.NIK, transResp.Message, user.Code, true)
-		if err != nil {
-			return
-		}
-		succesTrans++
-		i++
-		row++
-		totalPercobaan++
-		fmt.Printf("Pesan: %s\n", transResp.Message)
-		fmt.Println("Status: BERHASIL")
-		fmt.Println("========== TRANSAKSI SELESAI ==========")
-		time.Sleep(25 * time.Second)
-	}
-
-	log.Printf("\nSelesai :\n%d Transaksi berhasil diproses\n%d Transaksi gagal\n", succesTrans, failTrans)
+		log.Printf("\nSelesai :\n%d Transaksi berhasil diproses\n%d Transaksi gagal\n", succesTrans, failTrans)
 }
-
 
 func(u usecase) FilteringData(){
 
