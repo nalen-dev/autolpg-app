@@ -4,6 +4,7 @@ import (
 	"autolpg-app/helper"
 	"autolpg-app/models"
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,12 +33,14 @@ type CustomerRepository interface {
 type customerRepository struct {
 	httpClient *http.Client
 	token 		string
+	Db 			*sql.DB
 }
 
-func NewCustRepo(httpClient *http.Client, token string) CustomerRepository{
+func NewCustRepo(httpClient *http.Client, token string, Db *sql.DB) CustomerRepository{
 	return &customerRepository{
 			httpClient: httpClient, 
 			token: token,
+			Db: Db,
 		}
 }
 

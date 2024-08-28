@@ -3,6 +3,8 @@ package helper
 import (
 	"autolpg-app/models"
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -11,6 +13,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/chromedp"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -132,22 +136,45 @@ func GetCustomerCode(cust models.Customer) string {
 
 func StartAppTerminalInput() models.StartAppInput {
 
-	var userToken string
+	var user string
+	var password string
 	var startInput models.StartAppInput
+	var token string
+	var err error
 
 	scanner := bufio.NewScanner(os.Stdin)
-
+	
 	for {
-		fmt.Print("Masukkan token: ")
-		if scanner.Scan() {
-			userToken = scanner.Text()
+		for {
+			fmt.Print("Masukkan Email/No Handphone: ")
+			if scanner.Scan() {
+				user = scanner.Text()
+			}
+			if user != "" {
+				break
+			} else {
+				fmt.Println("Nilai tidak boleh kosong. Silakan masukkan kembali.")
+			}
 		}
-		if userToken != "" {
+	
+		for {
+			fmt.Print("Masukkan Password: ")
+			if scanner.Scan() {
+				password = scanner.Text()
+			}
+			if password != "" {
+				break
+			} else {
+				fmt.Println("Password tidak boleh kosong. Silakan masukkan kembali.")
+			}
+		}
+		fmt.Println("Mencoba mendapatkan token")
+		token, err = GetToken(user, password);
+		if err == nil {
 			break
-		} else {
-			fmt.Println("Nilai tidak boleh kosong. Silakan masukkan kembali.")
 		}
 	}
+
 
 	var mode string
 	for {
@@ -176,11 +203,9 @@ func StartAppTerminalInput() models.StartAppInput {
         }
     }
 	clearTerminal()
-
-	startInput.Token = userToken
+	startInput.Token = token
 	return startInput
 }
-
 
 func FilterDataTerminalInpit() models.FilterDataInput {
 	var userInput models.FilterDataInput
@@ -399,4 +424,104 @@ func TransParamPrep(prData models.GetProdResponse, userDetail models.GetCustomer
 		transactionParam.Subsidi.PengambilanItemSubsidi[0].Quantitas = 1
 		
 		return transactionParam
+}
+
+func GetToken(user string, password string)(string, error){
+	
+	var authToken string
+
+	 // Konfigurasi untuk non-headless mode
+	 opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", false),
+		chromedp.Flag("enable-notifications", true),
+		chromedp.Flag("disable-notifications", true),
+    )
+
+   // Inisialisasi context chromedp dengan opsi alokasi eksekusi
+    allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
+    if cancel != nil {
+        defer cancel()
+    }
+    ctx, cancel := chromedp.NewContext(allocCtx)
+    defer cancel()
+
+    loginURL := "https://subsiditepatlpg.mypertamina.id/merchant/auth/login"
+    protectedURL := "https://subsiditepatlpg.mypertamina.id/merchant/app/transaction-report"
+
+	err := chromedp.Run(ctx,
+		chromedp.Navigate(loginURL),
+		chromedp.WaitVisible("#mantine-r0", chromedp.ByID),
+		chromedp.Sleep(1*time.Second), // Waktu tunggu tambahan untuk memastikan halaman dimuat
+		chromedp.Evaluate(`(function() {
+			if (window.DevToolsExtension) {
+				window.DevToolsExtension.open();
+			} else {
+				console.log("DevTools Extension not found");
+			}
+		})()`, nil),
+		chromedp.Sleep(5*time.Second), // Tunggu alat pengembang muncul
+	)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+
+    err = chromedp.Run(ctx,
+        chromedp.Navigate(loginURL),
+        chromedp.WaitVisible("#mantine-r0", chromedp.ByID),
+        chromedp.SendKeys("#mantine-r0", user, chromedp.ByID),
+        chromedp.SendKeys("#mantine-r1", password, chromedp.ByID),
+        chromedp.Click(`.styles_root__6_rRr.styles_medium__7QTIz.styles_contained__1kIDF.styles_primary__pVpF_.styles_btnLogin__wsKTT`, chromedp.ByQuery),
+        chromedp.Sleep(3*time.Second), // Waktu tunggu tambahan setelah klik login
+    )
+
+    if err != nil {
+        return "", err
+    }
+
+	errorCtx, errorCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer errorCancel()
+
+	var errorMessage string
+	err = chromedp.Run(errorCtx,
+		chromedp.Text(`.mantine-Text-root.mantine-InputWrapper-error.mantine-TextInput-error.mantine-now1jg`, &errorMessage, chromedp.ByQuery),
+	)
+
+	if err != nil {
+		return "", err
+	}
+
+	if errorMessage != "" {
+		return "", errors.New(errorMessage)
+	}
+
+     chromedp.ListenTarget(ctx, func(ev interface{}) {
+        if ev, ok := ev.(*network.EventRequestWillBeSent); ok {
+            // Cek apakah request memiliki header Authorization
+            if authHeader, ok := ev.Request.Headers["Authorization"]; ok {
+                authToken = authHeader.(string)
+            }
+        }
+    })
+
+    err = chromedp.Run(ctx,
+        chromedp.Navigate(protectedURL),
+        chromedp.WaitVisible(`[data-testid="btnNav/app/transaction-report"]`, chromedp.ByQuery),
+        chromedp.Click(`[data-testid="btnNav/app/transaction-report"]`, chromedp.ByQuery),
+        chromedp.Sleep(3*time.Second),
+    )
+    if err != nil {
+        return "", err
+    }
+
+    // Tambahkan logic untuk menggunakan authToken di sini, misalnya melakukan scraping lanjutan.
+    if authToken != "" {
+        fmt.Println("Success Mendapatkan Token")
+    } else {
+        fmt.Println("Authorization Token tidak ditemukan.")
+    }
+
+	return authToken, nil
+
 }

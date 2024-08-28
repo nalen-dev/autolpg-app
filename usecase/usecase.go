@@ -35,6 +35,10 @@ func (u usecase) BulkData(token string){
 	uInput := helper.BulkDataTerminalInput()
 
 	for i := 0; i < uInput.TotalInsertData; {
+		if row == uInput.TotalInsertData - 1 {
+			row = 0
+		}
+
 		user, err := u.custRepo.GetNIKFiltered(row, uInput.SheetChoose)
 		if err != nil {
 			return

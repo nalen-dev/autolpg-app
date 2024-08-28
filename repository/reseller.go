@@ -2,6 +2,7 @@ package repository
 
 import (
 	"autolpg-app/models"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,12 +18,14 @@ type ResellerRepository interface {
 type resellerRepository struct {
 	httpClient *http.Client
 	token 		string
+	Db *sql.DB
 }
 
-func NewResellerRepo(httpClient *http.Client, token string) ResellerRepository{
+func NewResellerRepo(httpClient *http.Client, token string,Db *sql.DB) ResellerRepository{
 	return &resellerRepository{
 			httpClient: httpClient, 
 			token: token,
+			Db: Db,	
 		}
 }
 

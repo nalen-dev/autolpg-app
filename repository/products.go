@@ -2,6 +2,7 @@ package repository
 
 import (
 	"autolpg-app/models"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,12 +18,14 @@ type ProductRepository interface {
 type productRepository struct {
 	httpClient *http.Client
 	token 		string
+	Db 			*sql.DB
 }
 
-func NewProdRepo(httpClient *http.Client, token string) ProductRepository{
+func NewProdRepo(httpClient *http.Client, token string, Db *sql.DB) ProductRepository{
 	return &productRepository{
 			httpClient: httpClient, 
 			token: token,
+			Db: Db,
 		}
 }
 
